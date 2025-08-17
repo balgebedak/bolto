@@ -46,3 +46,22 @@ docs/instructions/Roadmap.md
 .cursorrules
 *.md
 .qodo
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Lint / tooling caches
+.eslintcache
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+
+# OS cruft (Windows)
+Thumbs.db
+Desktop.ini
+
+# Hosting/CI you’re not using here (harmless to ignore)
+.vercel/
+.netlify/
