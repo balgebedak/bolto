@@ -1,0 +1,162 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum OrgRole {
+  member
+  owner
+  admin
+}
+
+enum SubscriptionStatus {
+  active
+  trialing
+  canceled
+  past_due
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      UserRole @default(user)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relations
+  memberships UserOrg[]
+  projects    Project[]  @relation("UserOwnedProjects")
+  auditLogs   AuditLog[]
+
+  @@index([email])
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members   UserOrg[]
+  projects  Project[]
+  branding  BrandingSettings?
+  usage     QuotaUsage[]
+  subs      Subscription[]
+  auditLogs AuditLog[] // <-- back relation for AuditLog.org
+
+  @@unique([name]) // optional: enforce unique org names globally
+}
+
+model UserOrg {
+  id     String       @id @default(uuid())
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId  String
+  role   OrgRole      @default(member)
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+  @@index([userId])
+}
+
+model Project {
+  id         String       @id @default(uuid())
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId      String
+  owner      User?        @relation("UserOwnedProjects", fields: [ownerId], references: [id], onDelete: SetNull) // <-- optional
+  ownerId    String?
+  name       String
+  storageKey String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@unique([orgId, name]) // unique name per org
+  @@index([orgId])
+  @@index([ownerId])
+}
+
+model Plan {
+  // Use stable IDs like "free" | "pro" | "team"
+  id            String   @id
+  name          String
+  priceCents    Int      @default(0)
+  currency      String   @default("usd")
+  isActive      Boolean  @default(true)
+  stripePriceId String?
+  features      Json     @default(dbgenerated("'{}'::jsonb"))
+  limits        Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([isActive])
+}
+
+model Subscription {
+  id          String             @id @default(uuid())
+  org         Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String
+  plan        Plan               @relation(fields: [planId], references: [id])
+  planId      String
+  status      SubscriptionStatus @default(active)
+  startedAt   DateTime           @default(now())
+  endsAt      DateTime?
+  stripeSubId String?
+
+  @@index([orgId])
+  @@index([planId])
+  @@index([status])
+}
+
+model QuotaUsage {
+  id            String       @id @default(uuid())
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId         String
+  date          DateTime // store day-level (normalize to midnight UTC in app if you want)
+  tokensUsed    BigInt       @default(0)
+  previewsCount Int          @default(0)
+  storageUsedMB BigInt       @default(0)
+  projectsCount Int          @default(0)
+  updatedAt     DateTime     @default(now()) @updatedAt
+
+  @@unique([orgId, date])
+  @@index([orgId])
+}
+
+model BrandingSettings {
+  orgId     String       @id
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  logoUrl   String?
+  domain    String?
+  theme     Json? // e.g. { primary, background, domainToken? }
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+model AuditLog {
+  id        String       @id @default(uuid())
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId     String
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    String?
+  action    String
+  meta      Json?
+  createdAt DateTime     @default(now())
+
+  @@index([orgId])
+  @@index([userId])
+}

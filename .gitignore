@@ -65,3 +65,5 @@ Desktop.ini
 # Hosting/CI you’re not using here (harmless to ignore)
 .vercel/
 .netlify/
+
+/generated/prisma
